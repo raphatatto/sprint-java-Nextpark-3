@@ -12,7 +12,7 @@ import lombok.Setter;
 @SequenceGenerator(name="MOTOS_SEQ", sequenceName="MOTOS_SEQ", allocationSize=1)
 public class Moto {
     @Id
-    @GeneratedValue(strategy=GenerationType.SEQUENCE, generator="MOTOS_SEQ")
+    @GeneratedValue(strategy=GenerationType.IDENTITY, generator="MOTOS_SEQ")
     private Long id;
 
     @Column(name="PLACA", unique=true, nullable=false)

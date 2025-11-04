@@ -11,7 +11,7 @@ import lombok.Setter;
 @SequenceGenerator(name="USUARIOS_SEQ", sequenceName="USUARIOS_SEQ", allocationSize=1)
 public class Usuario {
     @Id
-    @GeneratedValue(strategy=GenerationType.SEQUENCE, generator="USUARIOS_SEQ")
+    @GeneratedValue(strategy=GenerationType.IDENTITY, generator="USUARIOS_SEQ")
     private Long id;
 
     @Column(name="USERNAME", unique=true, nullable=false)

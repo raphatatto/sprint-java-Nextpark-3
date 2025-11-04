@@ -12,7 +12,7 @@ import lombok.Setter;
 @SequenceGenerator(name="VAGAS_SEQ", sequenceName="VAGAS_SEQ", allocationSize=1)
 public class Vaga {
     @Id
-    @GeneratedValue(strategy=GenerationType.SEQUENCE, generator="VAGAS_SEQ")
+    @GeneratedValue(strategy=GenerationType.IDENTITY, generator="VAGAS_SEQ")
     private Long id;
 
     @Column(name="CODIGO", unique=true, nullable=false)

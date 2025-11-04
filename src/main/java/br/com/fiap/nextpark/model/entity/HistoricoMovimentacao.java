@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
 @SequenceGenerator(name="HIST_MOV_SEQ", sequenceName="HIST_MOV_SEQ", allocationSize=1)
 public class HistoricoMovimentacao {
     @Id
-    @GeneratedValue(strategy=GenerationType.SEQUENCE, generator="HIST_MOV_SEQ")
+    @GeneratedValue(strategy=GenerationType.IDENTITY, generator="HIST_MOV_SEQ")
     private Long id;
 
     @ManyToOne(optional=false) @JoinColumn(name="MOTO_ID")
