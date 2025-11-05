@@ -9,10 +9,9 @@ import lombok.Setter;
 @Setter
 @Entity
 @Table(name="VAGAS")
-@SequenceGenerator(name="VAGAS_SEQ", sequenceName="VAGAS_SEQ", allocationSize=1)
 public class Vaga {
     @Id
-    @GeneratedValue(strategy=GenerationType.IDENTITY, generator="VAGAS_SEQ")
+    @GeneratedValue(strategy=GenerationType.IDENTITY)
     private Long id;
 
     @Column(name="CODIGO", unique=true, nullable=false)

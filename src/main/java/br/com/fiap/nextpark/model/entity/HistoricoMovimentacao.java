@@ -10,10 +10,9 @@ import java.time.LocalDateTime;
 @Setter
 @Entity
 @Table(name="HIST_MOV")
-@SequenceGenerator(name="HIST_MOV_SEQ", sequenceName="HIST_MOV_SEQ", allocationSize=1)
 public class HistoricoMovimentacao {
     @Id
-    @GeneratedValue(strategy=GenerationType.IDENTITY, generator="HIST_MOV_SEQ")
+    @GeneratedValue(strategy=GenerationType.IDENTITY)
     private Long id;
 
     @ManyToOne(optional=false) @JoinColumn(name="MOTO_ID")
