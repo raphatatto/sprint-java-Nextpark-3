@@ -30,7 +30,7 @@ stages:
       displayName: 'Criar RG, Plan, ACR (admin) e WebApp (container)'
       inputs:
         azureSubscription: 'MyAzureSubscription'
-        scriptType: bash
+        scriptType: ps
         scriptLocation: inlineScript
         inlineScript: |
           set -e
@@ -66,7 +66,7 @@ stages:
       displayName: 'Configurar App Settings (DB_URL/DB_USER/DB_PASS)'
       inputs:
         azureSubscription: 'MyAzureSubscription'
-        scriptType: bash
+        scriptType: ps
         scriptLocation: inlineScript
         inlineScript: |
           az webapp config appsettings set \
@@ -115,7 +115,7 @@ stages:
       displayName: 'Docker build e push para ACR'
       inputs:
         azureSubscription: 'MyAzureSubscription'
-        scriptType: bash
+        scriptType: ps
         scriptLocation: inlineScript
         inlineScript: |
           set -e
@@ -144,7 +144,7 @@ stages:
       displayName: 'Apontar WebApp para imagem do ACR'
       inputs:
         azureSubscription: 'MyAzureSubscription'
-        scriptType: bash
+        scriptType: ps
         scriptLocation: inlineScript
         inlineScript: |
           set -e
