@@ -16,7 +16,7 @@ variables:
   sku: B1
 
 pool:
-  name: 'Default'   # agente Windows self-hosted
+  name: 'Default'  
 
 stages:
 # ================== 1) INFRA ==================
