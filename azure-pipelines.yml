@@ -123,17 +123,17 @@ stages:
 - stage: BuildApp
   displayName: 'Build, Testes e Publicação de Imagem'
   dependsOn: criarInfra
+  pool:
+    vmImage: 'ubuntu-latest'   # << usa runner hospedado (tem Docker, Java e Maven prontos)
   jobs:
   - job: build
-    displayName: 'Maven build + ACR build (remoto)'
+    displayName: 'Maven build + Docker push (ubuntu-latest)'
     steps:
-    # 2.1 Build + testes (profile test)
-    - powershell: |
+    - script: |
         mvn -v
-        mvn -B -ntp clean test
-      displayName: 'Build e testes Maven (profile test)'
+        mvn -B -ntp clean test   # surefire já ativa profile 'test' no seu pom.xml
+      displayName: 'Build e testes Maven'
 
-    # 2.2 Publicar resultados JUnit (facilita debug se quebrar)
     - task: PublishTestResults@2
       displayName: 'Publicar resultados de teste'
       inputs:
@@ -141,11 +141,10 @@ stages:
         testResultsFiles: 'target/surefire-reports/*.xml'
         failTaskOnFailedTests: true
 
-    # 2.3 Publicar artefatos (JAR + imageTag)
-    - powershell: |
-        New-Item -ItemType Directory -Force -Path "$(Build.ArtifactStagingDirectory)" | Out-Null
-        Copy-Item -Path ".\target\*.jar" -Destination "$(Build.ArtifactStagingDirectory)" -ErrorAction SilentlyContinue
-        "$(imageName):$(Build.BuildId)" | Out-File -FilePath "$(Build.ArtifactStagingDirectory)\imageTag.txt" -Encoding utf8
+    - script: |
+        mkdir -p "$(Build.ArtifactStagingDirectory)"
+        cp target/*.jar "$(Build.ArtifactStagingDirectory)" || true
+        echo "$(imageName):$(Build.BuildId)" > "$(Build.ArtifactStagingDirectory)/imageTag.txt"
       displayName: 'Preparar artefatos (.jar + imageTag.txt)'
 
     - task: PublishPipelineArtifact@1
@@ -155,30 +154,26 @@ stages:
         artifact: 'drop'
         publishLocation: 'pipeline'
 
-    # 2.4 Build remoto no ACR (sem Docker local)
+    # ===== Docker build & push (sem ACR Tasks) =====
     - task: AzureCLI@2
-      displayName: 'ACR Build (build remoto + push)'
+      displayName: 'Docker build & push no ACR (sem ACR Tasks)'
       inputs:
         azureSubscription: 'MyAzureSubscription'
-        scriptType: ps
+        scriptType: bash
         scriptLocation: inlineScript
         inlineScript: |
-          $ErrorActionPreference = 'Stop'
-          $acr = '$(acrName)'
-          $rg  = '$(resourceGroup)'
-          $tag = "$(imageName):$(Build.BuildId)"
+          set -e
+          acr='$(acrName)'
+          imageTag="$(imageName):$(Build.BuildId)"
+          loginServer=$(az acr show -n "$acr" --query loginServer -o tsv)
+          az acr login -n "$acr"
+          docker version
+          docker build -t "$imageTag" .
+          docker tag "$imageTag" "$loginServer/$imageTag"
+          docker push "$loginServer/$imageTag"
+          echo "##vso[task.setvariable variable=imageTag;isOutput=true]$imageTag"
+          echo "Imagem publicada: $loginServer/$imageTag"
 
-          cmd /c "az acr show -n $acr -g $rg >NUL 2>&1"
-          if ($LASTEXITCODE -ne 0) {
-            throw "ACR '$acr' não encontrado no RG '$rg'. Verifique a etapa 'criarInfra' e a assinatura da Service Connection."
-          }
-
-          # O ACR compila a imagem a partir do Dockerfile do repo
-          az acr build -r $acr -g $rg -t $tag .
-
-          # Variável de saída para o stage de deploy
-          Write-Host "##vso[task.setvariable variable=imageTag;isOutput=true]$tag"
-          Write-Host "Imagem publicada no ACR: $tag"
 
 # ================== 3) CD ==================
 - stage: deployApp
