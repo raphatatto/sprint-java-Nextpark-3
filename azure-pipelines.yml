@@ -164,20 +164,33 @@ stages:
         scriptLocation: inlineScript
         inlineScript: |
           $ErrorActionPreference = 'Stop'
+
           $acr = '$(acrName)'
           $img = "$(imageName):$(Build.BuildId)"
 
+          # 0) Garantir que estamos na pasta do Dockerfile (YAML: workingDirectory já cuida)
+          Write-Host "PWD: $(Get-Location)"
+
+          # 1) Docker ativo
           try { docker version | Out-Null } catch {
             throw "Docker Desktop não está em execução (Engine Linux). Abra o Docker e tente novamente."
           }
 
+          # 2) Conferir se o JAR existe (evita falha no COPY)
+          if (-not (Get-ChildItem -Path 'target' -Filter '*.jar' -ErrorAction SilentlyContinue)) {
+            throw "Nenhum JAR encontrado em .\target. Rode o build Maven antes (mvn -B -ntp clean package)."
+          }
+
+          # 3) Login no ACR
           $loginServer = az acr show -n $acr --query loginServer -o tsv
           az acr login -n $acr | Out-Null
 
+          # 4) Build/Tag/Push
           docker build -t $img .
           docker tag $img "$loginServer/$img"
           docker push "$loginServer/$img"
 
+          # 5) Exportar tag para o stage de deploy
           Write-Host "##vso[task.setvariable variable=imageTag;isOutput=true]$img"
           Write-Host "Imagem publicada: $loginServer/$img"
 
