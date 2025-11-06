@@ -1,3 +1,5 @@
+# azure-pipelines.yml (Windows self-hosted)
+
 trigger:
   branches:
     include:
@@ -9,27 +11,22 @@ variables:
   resourceGroup: rg-sprint-Nextpark
   appPlan: planNextpark
   appName: nextpark-sprint-$(rm)
-  acrName: nextparkacr$(rm)
+  acrName: nextparkacrrm554983
   imageName: nextpark
   sku: B1
 
 pool:
-  name: 'Default'   # seu agente Windows
+  name: 'Default'   # agente Windows self-hosted
 
 stages:
-# ================ 1) INFRA ================
+# ================== 1) INFRA ==================
 - stage: criarInfra
   displayName: 'Criar infraestrutura (RG, Plan, ACR, WebApp)'
   jobs:
   - job: infra
     displayName: 'Provisionar Azure (idempotente)'
     steps:
-    - task: AzureCLI@2
-      displayName: 'Registrar resource providers (ACR/Web) se necessário'
-      inputs:
-        azureSubscription: 'MyAzureSubscription'
-        scriptType: ps
-        scriptLocation: inlineScript
+    # 1.1 Registrar providers necessários
     - task: AzureCLI@2
       displayName: 'Registrar providers ACR/Web (se necessário)'
       inputs:
@@ -41,13 +38,19 @@ stages:
           foreach ($ns in @('Microsoft.ContainerRegistry','Microsoft.Web')) {
             $state = az provider show -n $ns --query registrationState -o tsv
             if ($state -ne 'Registered') {
+              Write-Host "Registrando $ns ..."
               az provider register -n $ns | Out-Null
-              do { Start-Sleep 5; $state = az provider show -n $ns --query registrationState -o tsv } until ($state -eq 'Registered')
+              do {
+                Start-Sleep -Seconds 5
+                $state = az provider show -n $ns --query registrationState -o tsv
+                Write-Host "$ns = $state"
+              } until ($state -eq 'Registered')
+            } else {
+              Write-Host "$ns já está Registered."
             }
           }
 
-          Register-Provider -ns "Microsoft.ContainerRegistry"
-          Register-Provider -ns "Microsoft.Web"
+    # 1.2 Criar RG/Plan/ACR/WebApp (idempotente)
     - task: AzureCLI@2
       displayName: 'Criar RG, Plan, ACR (admin) e WebApp (container)'
       inputs:
@@ -55,7 +58,8 @@ stages:
         scriptType: ps
         scriptLocation: inlineScript
         inlineScript: |
-          $ErrorActionPreference = 'Continue'  # evita abortar com nativo
+          $ErrorActionPreference = 'Stop'
+
           $rg   = '$(resourceGroup)'
           $loc  = '$(location)'
           $plan = '$(appPlan)'
@@ -63,10 +67,10 @@ stages:
           $acr  = '$(acrName)'
           $sku  = '$(sku)'
 
-          # RG (sempre ok)
+          # RG
           az group create -n $rg -l $loc --only-show-errors | Out-Null
 
-          # App Service Plan (testa existência via cmd /c)
+          # App Service Plan (Linux)
           cmd /c "az appservice plan show -n $plan -g $rg --only-show-errors >NUL 2>&1"
           if ($LASTEXITCODE -ne 0) {
             Write-Host "Plan '$plan' não existe. Criando..."
@@ -95,6 +99,7 @@ stages:
 
           Write-Host "Infra OK: RG=$rg PLAN=$plan ACR=$acr APP=$app"
 
+    # 1.3 App Settings com secrets
     - task: AzureCLI@2
       displayName: 'Configurar App Settings (DB_URL/DB_USER/DB_PASS)'
       inputs:
@@ -102,28 +107,41 @@ stages:
         scriptType: ps
         scriptLocation: inlineScript
         inlineScript: |
+          $ErrorActionPreference = 'Stop'
           $rg  = '$(resourceGroup)'
           $app = '$(appName)'
+
           az webapp config appsettings set `
             -g $rg -n $app --settings `
             DB_URL="$(DB_URL)" `
             DB_USER="$(DB_USER)" `
             DB_PASS="$(DB_PASS)" --only-show-errors | Out-Null
+
           Write-Host "App settings definidos."
 
-# ================ 2) CI ================
+# ================== 2) CI ==================
 - stage: BuildApp
   displayName: 'Build, Testes e Publicação de Imagem'
   dependsOn: criarInfra
   jobs:
   - job: build
-    displayName: 'Maven build + Docker push'
+    displayName: 'Maven build + ACR build (remoto)'
     steps:
+    # 2.1 Build + testes (profile test)
     - powershell: |
         mvn -v
-        mvn -B -ntp clean test package
-      displayName: 'Build e testes Maven'
+        mvn -B -ntp clean test -Dspring.profiles.active=test
+      displayName: 'Build e testes Maven (profile test)'
 
+    # 2.2 Publicar resultados JUnit (facilita debug se quebrar)
+    - task: PublishTestResults@2
+      displayName: 'Publicar resultados de teste'
+      inputs:
+        testResultsFormat: 'JUnit'
+        testResultsFiles: 'target/surefire-reports/*.xml'
+        failTaskOnFailedTests: true
+
+    # 2.3 Publicar artefatos (JAR + imageTag)
     - powershell: |
         New-Item -ItemType Directory -Force -Path "$(Build.ArtifactStagingDirectory)" | Out-Null
         Copy-Item -Path ".\target\*.jar" -Destination "$(Build.ArtifactStagingDirectory)" -ErrorAction SilentlyContinue
@@ -137,6 +155,7 @@ stages:
         artifact: 'drop'
         publishLocation: 'pipeline'
 
+    # 2.4 Build remoto no ACR (sem Docker local)
     - task: AzureCLI@2
       displayName: 'ACR Build (build remoto + push)'
       inputs:
@@ -149,19 +168,19 @@ stages:
           $rg  = '$(resourceGroup)'
           $tag = "$(imageName):$(Build.BuildId)"
 
-          # garante que o ACR existe (caso a etapa anterior tenha sido pulada)
           cmd /c "az acr show -n $acr -g $rg >NUL 2>&1"
           if ($LASTEXITCODE -ne 0) {
             throw "ACR '$acr' não encontrado no RG '$rg'. Verifique a etapa 'criarInfra' e a assinatura da Service Connection."
           }
 
+          # O ACR compila a imagem a partir do Dockerfile do repo
           az acr build -r $acr -g $rg -t $tag .
 
-          Write-Host "
+          # Variável de saída para o stage de deploy
+          Write-Host "##vso[task.setvariable variable=imageTag;isOutput=true]$tag"
           Write-Host "Imagem publicada no ACR: $tag"
 
-
-# ================ 3) CD ================
+# ================== 3) CD ==================
 - stage: deployApp
   displayName: 'Deploy no Azure Web App (Container)'
   dependsOn: BuildApp
@@ -176,11 +195,12 @@ stages:
         scriptType: ps
         scriptLocation: inlineScript
         inlineScript: |
-          $ErrorActionPreference = 'Continue'
+          $ErrorActionPreference = 'Stop'
           $rg       = '$(resourceGroup)'
           $app      = '$(appName)'
           $acr      = '$(acrName)'
           $imageTag = '$(imageTag)'
+          if (-not $imageTag) { $imageTag = "$(imageName):$(Build.BuildId)" }
 
           $loginServer = az acr show -n $acr --query loginServer -o tsv --only-show-errors
 
@@ -189,7 +209,7 @@ stages:
           $acrUser = $acrCred.username
           $acrPass = $acrCred.passwords[0].value
 
-          # Web Apps Linux esperam 80; nossa app expõe 8080
+          # Web Apps Linux esperam 80 por padrão; sua app expõe 8080
           az webapp config appsettings set -g $rg -n $app --settings WEBSITES_PORT=8080 --only-show-errors | Out-Null
 
           az webapp config container set -g $rg -n $app `
