@@ -1,4 +1,5 @@
-# azure-pipelines.yml
+# azure-pipelines.yml (Windows self-hosted)
+
 trigger:
   branches:
     include:
@@ -14,7 +15,7 @@ variables:
   imageName: nextpark
   sku: B1
 
-# Use Microsoft-hosted agent com tudo pronto
+# Agente Windows do seu pool
 pool:
   name: 'Default'
 
@@ -33,34 +34,46 @@ stages:
         scriptType: ps
         scriptLocation: inlineScript
         inlineScript: |
-          set -e
+          $ErrorActionPreference = 'Stop'
 
-          rg='$(resourceGroup)'
-          loc='$(location)'
-          plan='$(appPlan)'
-          app='$(appName)'
-          acr='$(acrName)'
-          sku='$(sku)'
+          $rg   = '$(resourceGroup)'
+          $loc  = '$(location)'
+          $plan = '$(appPlan)'
+          $app  = '$(appName)'
+          $acr  = '$(acrName)'
+          $sku  = '$(sku)'
 
           # RG
-          az group create -n "$rg" -l "$loc" 1>/dev/null
+          az group create -n $rg -l $loc | Out-Null
 
           # App Service Plan (Linux)
-          if ! az appservice plan show -n "$plan" -g "$rg" >/dev/null 2>&1; then
-            az appservice plan create -n "$plan" -g "$rg" --sku "$sku" --is-linux 1>/dev/null
-          fi
+          $planExists = az appservice plan show -n $plan -g $rg 2>$null
+          if (-not $planExists) {
+            az appservice plan create -n $plan -g $rg --sku $sku --is-linux | Out-Null
+            Write-Host "App Service Plan '$plan' criado."
+          } else {
+            Write-Host "App Service Plan '$plan' já existe."
+          }
 
           # ACR (admin on para simplificar o deploy)
-          if ! az acr show -n "$acr" -g "$rg" >/dev/null 2>&1; then
-            az acr create -n "$acr" -g "$rg" -l "$loc" --sku Basic --admin-enabled true 1>/dev/null
-          fi
+          $acrExists = az acr show -n $acr -g $rg 2>$null
+          if (-not $acrExists) {
+            az acr create -n $acr -g $rg -l $loc --sku Basic --admin-enabled true | Out-Null
+            Write-Host "ACR '$acr' criado."
+          } else {
+            Write-Host "ACR '$acr' já existe."
+          }
 
           # WebApp for Containers (imagem placeholder)
-          if ! az webapp show -g "$rg" -n "$app" >/dev/null 2>&1; then
-            az webapp create -g "$rg" -p "$plan" -n "$app" --deployment-container-image-name "hello-world" 1>/dev/null
-          fi
+          $appExists = az webapp show -g $rg -n $app 2>$null
+          if (-not $appExists) {
+            az webapp create -g $rg -p $plan -n $app --deployment-container-image-name "hello-world" | Out-Null
+            Write-Host "WebApp '$app' criado."
+          } else {
+            Write-Host "WebApp '$app' já existe."
+          }
 
-          echo "Infra OK: RG=$rg PLAN=$plan ACR=$acr APP=$app"
+          Write-Host "Infra OK: RG=$rg PLAN=$plan ACR=$acr APP=$app"
 
     - task: AzureCLI@2
       displayName: 'Configurar App Settings (DB_URL/DB_USER/DB_PASS)'
@@ -69,12 +82,17 @@ stages:
         scriptType: ps
         scriptLocation: inlineScript
         inlineScript: |
-          az webapp config appsettings set \
-            -g '$(resourceGroup)' -n '$(appName)' --settings \
-            DB_URL='$(DB_URL)' \
-            DB_USER='$(DB_USER)' \
-            DB_PASS='$(DB_PASS)' 1>/dev/null
-          echo "App settings definidos."
+          $ErrorActionPreference = 'Stop'
+          $rg  = '$(resourceGroup)'
+          $app = '$(appName)'
+
+          az webapp config appsettings set `
+            -g $rg -n $app --settings `
+            DB_URL="$(DB_URL)" `
+            DB_USER="$(DB_USER)" `
+            DB_PASS="$(DB_PASS)" | Out-Null
+
+          Write-Host "App settings definidos."
 
 # ================== 2) CI ==================
 - stage: BuildApp
@@ -84,33 +102,24 @@ stages:
   - job: build
     displayName: 'Maven build + Docker push'
     steps:
-    # JDK 17
-    - task: JavaToolInstaller@0
-      inputs:
-        versionSpec: '17'
-        jdkArchitectureOption: 'x64'
-        jdkSourceOption: 'PreInstalled'
-
-    # Build + testes Maven
-    - script: |
+    - powershell: |
         mvn -v
         mvn -B -ntp clean test package
       displayName: 'Build e testes Maven'
 
-    # Publicar artefatos (JAR + imageTag)
-    - script: |
-        mkdir -p "$(Build.ArtifactStagingDirectory)"
-        cp target/*.jar "$(Build.ArtifactStagingDirectory)" || true
-        echo "$(imageName):$(Build.BuildId)" > "$(Build.ArtifactStagingDirectory)/imageTag.txt"
-      displayName: 'Preparar artefatos'
+    - powershell: |
+        New-Item -ItemType Directory -Force -Path "$(Build.ArtifactStagingDirectory)" | Out-Null
+        Copy-Item -Path ".\target\*.jar" -Destination "$(Build.ArtifactStagingDirectory)" -ErrorAction SilentlyContinue
+        "$(imageName):$(Build.BuildId)" | Out-File -FilePath "$(Build.ArtifactStagingDirectory)\imageTag.txt" -Encoding utf8
+      displayName: 'Preparar artefatos (.jar + imageTag.txt)'
+
     - task: PublishPipelineArtifact@1
+      displayName: 'Publicar artefatos no Azure DevOps'
       inputs:
         targetPath: '$(Build.ArtifactStagingDirectory)'
         artifact: 'drop'
         publishLocation: 'pipeline'
-      displayName: 'Publicar artefatos no Azure DevOps'
 
-    # Build & Push Docker para o ACR
     - task: AzureCLI@2
       displayName: 'Docker build e push para ACR'
       inputs:
@@ -118,19 +127,20 @@ stages:
         scriptType: ps
         scriptLocation: inlineScript
         inlineScript: |
-          set -e
-          acr='$(acrName)'
-          img='$(imageName):$(Build.BuildId)'
+          $ErrorActionPreference = 'Stop'
+          $acr = '$(acrName)'
+          $img = "$(imageName):$(Build.BuildId)"
 
-          loginServer=$(az acr show -n "$acr" --query loginServer -o tsv)
-          az acr login -n "$acr"
+          $loginServer = az acr show -n $acr --query loginServer -o tsv
+          az acr login -n $acr | Out-Null
 
-          docker build -t "$img" .
-          docker tag "$img" "$loginServer/$img"
+          docker version
+          docker build -t $img .
+          docker tag $img "$loginServer/$img"
           docker push "$loginServer/$img"
 
-          echo "##vso[task.setvariable variable=imageTag;isOutput=true]$img"
-          echo "Imagem publicada: $loginServer/$img"
+          Write-Host "##vso[task.setvariable variable=imageTag;isOutput=true]$img"
+          Write-Host "Imagem publicada: $loginServer/$img"
 
 # ================== 3) CD ==================
 - stage: deployApp
@@ -147,25 +157,26 @@ stages:
         scriptType: ps
         scriptLocation: inlineScript
         inlineScript: |
-          set -e
-          rg='$(resourceGroup)'
-          app='$(appName)'
-          acr='$(acrName)'
-          imageTag='$(imageTag)'
+          $ErrorActionPreference = 'Stop'
+          $rg       = '$(resourceGroup)'
+          $app      = '$(appName)'
+          $acr      = '$(acrName)'
+          $imageTag = '$(imageTag)'
 
-          loginServer=$(az acr show -n "$acr" --query loginServer -o tsv)
+          $loginServer = az acr show -n $acr --query loginServer -o tsv
 
-          # Credenciais admin do ACR (porque criamos com --admin-enabled true)
-          acrUser=$(az acr credential show -n "$acr" --query username -o tsv)
-          acrPass=$(az acr credential show -n "$acr" --query "passwords[0].value" -o tsv)
+          # Credenciais admin do ACR (criadas com --admin-enabled true)
+          $acrCred = az acr credential show -n $acr | ConvertFrom-Json
+          $acrUser = $acrCred.username
+          $acrPass = $acrCred.passwords[0].value
 
-          # Web Apps em Linux esperam 80 por padrão — sua app expõe 8080
-          az webapp config appsettings set -g "$rg" -n "$app" --settings WEBSITES_PORT=8080 1>/dev/null
+          # Web Apps Linux esperam 80 por padrão; sua app expõe 8080
+          az webapp config appsettings set -g $rg -n $app --settings WEBSITES_PORT=8080 | Out-Null
 
-          az webapp config container set -g "$rg" -n "$app" \
-            --docker-custom-image-name "$loginServer/$imageTag" \
-            --docker-registry-server-url "https://$loginServer" \
-            --docker-registry-server-user "$acrUser" \
-            --docker-registry-server-password "$acrPass" 1>/dev/null
+          az webapp config container set -g $rg -n $app `
+            --docker-custom-image-name "$loginServer/$imageTag" `
+            --docker-registry-server-url "https://$loginServer" `
+            --docker-registry-server-user "$acrUser" `
+            --docker-registry-server-password "$acrPass" | Out-Null
 
-          echo "Deploy OK: $loginServer/$imageTag"
+          Write-Host "Deploy OK: $loginServer/$imageTag"
