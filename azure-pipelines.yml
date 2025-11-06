@@ -176,9 +176,8 @@ stages:
             throw "Docker Desktop não está em execução (Engine Linux). Abra o Docker e tente novamente."
           }
 
-          # 2) Conferir se o JAR existe (evita falha no COPY)
           if (-not (Get-ChildItem -Path 'target' -Filter '*.jar' -ErrorAction SilentlyContinue)) {
-            throw "Nenhum JAR encontrado em .\target. Rode o build Maven antes (mvn -B -ntp clean package)."
+            throw "Ainda não há JAR em .\target. Confira o passo Maven package."
           }
 
           # 3) Login no ACR
