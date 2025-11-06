@@ -30,21 +30,19 @@ stages:
         azureSubscription: 'MyAzureSubscription'
         scriptType: ps
         scriptLocation: inlineScript
+    - task: AzureCLI@2
+      displayName: 'Registrar providers ACR/Web (se necessário)'
+      inputs:
+        azureSubscription: 'MyAzureSubscription'
+        scriptType: ps
+        scriptLocation: inlineScript
         inlineScript: |
           $ErrorActionPreference = 'Stop'
-
-          function Register-Provider([string]$ns) {
-            $state = az provider show -n $ns --query "registrationState" -o tsv
+          foreach ($ns in @('Microsoft.ContainerRegistry','Microsoft.Web')) {
+            $state = az provider show -n $ns --query registrationState -o tsv
             if ($state -ne 'Registered') {
-              Write-Host "Registrando $ns ..."
               az provider register -n $ns | Out-Null
-              do {
-                Start-Sleep -Seconds 5
-                $state = az provider show -n $ns --query "registrationState" -o tsv
-                Write-Host "$ns = $state"
-              } until ($state -eq 'Registered')
-            } else {
-              Write-Host "$ns já está Registered."
+              do { Start-Sleep 5; $state = az provider show -n $ns --query registrationState -o tsv } until ($state -eq 'Registered')
             }
           }
 
@@ -140,26 +138,28 @@ stages:
         publishLocation: 'pipeline'
 
     - task: AzureCLI@2
-      displayName: 'Docker build e push para ACR'
+      displayName: 'ACR Build (build remoto + push)'
       inputs:
         azureSubscription: 'MyAzureSubscription'
         scriptType: ps
         scriptLocation: inlineScript
         inlineScript: |
-          $ErrorActionPreference = 'Continue'
+          $ErrorActionPreference = 'Stop'
           $acr = '$(acrName)'
-          $img = "$(imageName):$(Build.BuildId)"
+          $rg  = '$(resourceGroup)'
+          $tag = "$(imageName):$(Build.BuildId)"
 
-          $loginServer = az acr show -n $acr --query loginServer -o tsv --only-show-errors
-          az acr login -n $acr --only-show-errors | Out-Null
+          # garante que o ACR existe (caso a etapa anterior tenha sido pulada)
+          cmd /c "az acr show -n $acr -g $rg >NUL 2>&1"
+          if ($LASTEXITCODE -ne 0) {
+            throw "ACR '$acr' não encontrado no RG '$rg'. Verifique a etapa 'criarInfra' e a assinatura da Service Connection."
+          }
 
-          docker version
-          docker build -t $img .
-          docker tag $img "$loginServer/$img"
-          docker push "$loginServer/$img"
+          az acr build -r $acr -g $rg -t $tag .
 
-          Write-Host "##vso[task.setvariable variable=imageTag;isOutput=true]$img"
-          Write-Host "Imagem publicada: $loginServer/$img"
+          Write-Host "
+          Write-Host "Imagem publicada no ACR: $tag"
+
 
 # ================ 3) CD ================
 - stage: deployApp
