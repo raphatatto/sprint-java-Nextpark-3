@@ -130,7 +130,7 @@ stages:
     # 2.1 Build + testes (profile test)
     - powershell: |
         mvn -v
-        mvn -B -ntp clean test -Dspring.profiles.active=test
+        mvn -B -ntp clean test
       displayName: 'Build e testes Maven (profile test)'
 
     # 2.2 Publicar resultados JUnit (facilita debug se quebrar)
