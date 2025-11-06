@@ -25,6 +25,32 @@ stages:
     displayName: 'Provisionar Azure (idempotente)'
     steps:
     - task: AzureCLI@2
+      displayName: 'Registrar resource providers (ACR/Web) se necessário'
+      inputs:
+        azureSubscription: 'MyAzureSubscription'
+        scriptType: ps
+        scriptLocation: inlineScript
+        inlineScript: |
+          $ErrorActionPreference = 'Stop'
+
+          function Register-Provider([string]$ns) {
+            $state = az provider show -n $ns --query "registrationState" -o tsv
+            if ($state -ne 'Registered') {
+              Write-Host "Registrando $ns ..."
+              az provider register -n $ns | Out-Null
+              do {
+                Start-Sleep -Seconds 5
+                $state = az provider show -n $ns --query "registrationState" -o tsv
+                Write-Host "$ns = $state"
+              } until ($state -eq 'Registered')
+            } else {
+              Write-Host "$ns já está Registered."
+            }
+          }
+
+          Register-Provider -ns "Microsoft.ContainerRegistry"
+          Register-Provider -ns "Microsoft.Web"
+    - task: AzureCLI@2
       displayName: 'Criar RG, Plan, ACR (admin) e WebApp (container)'
       inputs:
         azureSubscription: 'MyAzureSubscription'
