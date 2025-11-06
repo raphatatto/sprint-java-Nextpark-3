@@ -1,5 +1,3 @@
-# azure-pipelines.yml (Windows self-hosted)
-
 trigger:
   branches:
     include:
@@ -15,12 +13,11 @@ variables:
   imageName: nextpark
   sku: B1
 
-# Agente Windows do seu pool
 pool:
-  name: 'Default'
+  name: 'Default'   # seu agente Windows
 
 stages:
-# ================== 1) INFRA ==================
+# ================ 1) INFRA ================
 - stage: criarInfra
   displayName: 'Criar infraestrutura (RG, Plan, ACR, WebApp)'
   jobs:
@@ -34,8 +31,7 @@ stages:
         scriptType: ps
         scriptLocation: inlineScript
         inlineScript: |
-          $ErrorActionPreference = 'Stop'
-
+          $ErrorActionPreference = 'Continue'  # evita abortar com nativo
           $rg   = '$(resourceGroup)'
           $loc  = '$(location)'
           $plan = '$(appPlan)'
@@ -43,32 +39,32 @@ stages:
           $acr  = '$(acrName)'
           $sku  = '$(sku)'
 
-          # RG
-          az group create -n $rg -l $loc | Out-Null
+          # RG (sempre ok)
+          az group create -n $rg -l $loc --only-show-errors | Out-Null
 
-          # App Service Plan (Linux)
-          $planExists = az appservice plan show -n $plan -g $rg 2>$null
-          if (-not $planExists) {
-            az appservice plan create -n $plan -g $rg --sku $sku --is-linux | Out-Null
-            Write-Host "App Service Plan '$plan' criado."
+          # App Service Plan (testa existência via cmd /c)
+          cmd /c "az appservice plan show -n $plan -g $rg --only-show-errors >NUL 2>&1"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Plan '$plan' não existe. Criando..."
+            az appservice plan create -n $plan -g $rg --sku $sku --is-linux --only-show-errors | Out-Null
           } else {
-            Write-Host "App Service Plan '$plan' já existe."
+            Write-Host "Plan '$plan' já existe."
           }
 
-          # ACR (admin on para simplificar o deploy)
-          $acrExists = az acr show -n $acr -g $rg 2>$null
-          if (-not $acrExists) {
-            az acr create -n $acr -g $rg -l $loc --sku Basic --admin-enabled true | Out-Null
-            Write-Host "ACR '$acr' criado."
+          # ACR (admin habilitado)
+          cmd /c "az acr show -n $acr -g $rg --only-show-errors >NUL 2>&1"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "ACR '$acr' não existe. Criando..."
+            az acr create -n $acr -g $rg -l $loc --sku Basic --admin-enabled true --only-show-errors | Out-Null
           } else {
             Write-Host "ACR '$acr' já existe."
           }
 
-          # WebApp for Containers (imagem placeholder)
-          $appExists = az webapp show -g $rg -n $app 2>$null
-          if (-not $appExists) {
-            az webapp create -g $rg -p $plan -n $app --deployment-container-image-name "hello-world" | Out-Null
-            Write-Host "WebApp '$app' criado."
+          # WebApp for Containers
+          cmd /c "az webapp show -g $rg -n $app --only-show-errors >NUL 2>&1"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "WebApp '$app' não existe. Criando..."
+            az webapp create -g $rg -p $plan -n $app --deployment-container-image-name "hello-world" --only-show-errors | Out-Null
           } else {
             Write-Host "WebApp '$app' já existe."
           }
@@ -82,19 +78,16 @@ stages:
         scriptType: ps
         scriptLocation: inlineScript
         inlineScript: |
-          $ErrorActionPreference = 'Stop'
           $rg  = '$(resourceGroup)'
           $app = '$(appName)'
-
           az webapp config appsettings set `
             -g $rg -n $app --settings `
             DB_URL="$(DB_URL)" `
             DB_USER="$(DB_USER)" `
-            DB_PASS="$(DB_PASS)" | Out-Null
-
+            DB_PASS="$(DB_PASS)" --only-show-errors | Out-Null
           Write-Host "App settings definidos."
 
-# ================== 2) CI ==================
+# ================ 2) CI ================
 - stage: BuildApp
   displayName: 'Build, Testes e Publicação de Imagem'
   dependsOn: criarInfra
@@ -127,12 +120,12 @@ stages:
         scriptType: ps
         scriptLocation: inlineScript
         inlineScript: |
-          $ErrorActionPreference = 'Stop'
+          $ErrorActionPreference = 'Continue'
           $acr = '$(acrName)'
           $img = "$(imageName):$(Build.BuildId)"
 
-          $loginServer = az acr show -n $acr --query loginServer -o tsv
-          az acr login -n $acr | Out-Null
+          $loginServer = az acr show -n $acr --query loginServer -o tsv --only-show-errors
+          az acr login -n $acr --only-show-errors | Out-Null
 
           docker version
           docker build -t $img .
@@ -142,7 +135,7 @@ stages:
           Write-Host "##vso[task.setvariable variable=imageTag;isOutput=true]$img"
           Write-Host "Imagem publicada: $loginServer/$img"
 
-# ================== 3) CD ==================
+# ================ 3) CD ================
 - stage: deployApp
   displayName: 'Deploy no Azure Web App (Container)'
   dependsOn: BuildApp
@@ -157,26 +150,26 @@ stages:
         scriptType: ps
         scriptLocation: inlineScript
         inlineScript: |
-          $ErrorActionPreference = 'Stop'
+          $ErrorActionPreference = 'Continue'
           $rg       = '$(resourceGroup)'
           $app      = '$(appName)'
           $acr      = '$(acrName)'
           $imageTag = '$(imageTag)'
 
-          $loginServer = az acr show -n $acr --query loginServer -o tsv
+          $loginServer = az acr show -n $acr --query loginServer -o tsv --only-show-errors
 
           # Credenciais admin do ACR (criadas com --admin-enabled true)
-          $acrCred = az acr credential show -n $acr | ConvertFrom-Json
+          $acrCred = az acr credential show -n $acr --only-show-errors | ConvertFrom-Json
           $acrUser = $acrCred.username
           $acrPass = $acrCred.passwords[0].value
 
-          # Web Apps Linux esperam 80 por padrão; sua app expõe 8080
-          az webapp config appsettings set -g $rg -n $app --settings WEBSITES_PORT=8080 | Out-Null
+          # Web Apps Linux esperam 80; nossa app expõe 8080
+          az webapp config appsettings set -g $rg -n $app --settings WEBSITES_PORT=8080 --only-show-errors | Out-Null
 
           az webapp config container set -g $rg -n $app `
             --docker-custom-image-name "$loginServer/$imageTag" `
             --docker-registry-server-url "https://$loginServer" `
             --docker-registry-server-user "$acrUser" `
-            --docker-registry-server-password "$acrPass" | Out-Null
+            --docker-registry-server-password "$acrPass" --only-show-errors | Out-Null
 
           Write-Host "Deploy OK: $loginServer/$imageTag"
