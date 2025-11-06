@@ -16,7 +16,7 @@ variables:
 
 # Use Microsoft-hosted agent com tudo pronto
 pool:
-  vmImage: 'ubuntu-latest'
+  name: 'Default'
 
 stages:
 # ================== 1) INFRA ==================
