@@ -223,26 +223,30 @@ stages:
         scriptLocation: inlineScript
         inlineScript: |
           $ErrorActionPreference = 'Stop'
-          $rg       = '$(resourceGroup)'
-          $app      = '$(appName)'
-          $acr      = '$(acrName)'
-          $imageTag = '$(imageTag)'
-          if (-not $imageTag) { $imageTag = "$(imageName):$(Build.BuildId)" }
+          $rg  = '$(resourceGroup)'
+          $app = '$(appName)'
+          $acr = '$(acrName)'
 
-          $loginServer = az acr show -n $acr --query loginServer -o tsv --only-show-errors
+          # Pega a tag do stage anterior (se não vier, usa BuildId)
+          $imageTag = "$(imageTag)"
+          if ([string]::IsNullOrWhiteSpace($imageTag) -or $imageTag -eq '$(imageTag)') {
+            $imageTag = "$(imageName):$(Build.BuildId)"
+          }
 
-          # Credenciais admin do ACR (criadas com --admin-enabled true)
-          $acrCred = az acr credential show -n $acr --only-show-errors | ConvertFrom-Json
+          $loginServer = az acr show -n $acr --query loginServer -o tsv
+
+          # Credenciais admin do ACR
+          $acrCred = az acr credential show -n $acr | ConvertFrom-Json
           $acrUser = $acrCred.username
           $acrPass = $acrCred.passwords[0].value
 
-          # Web Apps Linux esperam 80 por padrão; sua app expõe 8080
-          az webapp config appsettings set -g $rg -n $app --settings WEBSITES_PORT=8080 --only-show-errors | Out-Null
+          # Web Apps Linux escuta 80 por padrão; sua app expõe 8080
+          az webapp config appsettings set -g $rg -n $app --settings WEBSITES_PORT=8080 | Out-Null
 
-          az webapp config container set -g $rg -n $app `
-            --docker-custom-image-name "$loginServer/$imageTag" `
-            --docker-registry-server-url "https://$loginServer" `
-            --docker-registry-server-user "$acrUser" `
-            --docker-registry-server-password "$acrPass" --only-show-errors | Out-Null
+          $fullImage = "$loginServer/$imageTag"
 
-          Write-Host "Deploy OK: $loginServer/$imageTag"
+          # ❗ Sem quebras com crase: tudo em UMA linha
+          az webapp config container set -g $rg -n $app --docker-custom-image-name $fullImage --docker-registry-server-url "https://$loginServer" --docker-registry-server-user $acrUser --docker-registry-server-password $acrPass
+
+          Write-Host "Deploy OK: $fullImage"
+
