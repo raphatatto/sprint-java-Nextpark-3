@@ -3,8 +3,9 @@
 trigger:
   branches:
     include:
-      - main
       - master
+      - main
+      
 
 variables:
   rm: rm554983
@@ -223,7 +224,6 @@ stages:
         scriptType: ps
         scriptLocation: inlineScript
         inlineScript: |
-         inlineScript: |
           $ErrorActionPreference = 'Stop'
           $rg  = '$(resourceGroup)'
           $app = '$(appName)'
