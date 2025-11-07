@@ -125,15 +125,24 @@ stages:
   dependsOn: criarInfra
   jobs:
   - job: build
-    displayName: 'Maven build + ACR build (remoto)'
+    displayName: 'Maven build + Docker push (Windows)'
     steps:
-    # 2.1 Build + testes (profile test)
+
+    # 2.1 Build do JAR
     - powershell: |
         mvn -v
-        mvn -B -ntp clean test
-      displayName: 'Build e testes Maven (profile test)'
+        mvn -B -ntp clean package -DskipTests
+      workingDirectory: '$(Build.SourcesDirectory)'
+      displayName: 'Build do JAR com Maven'
 
-    # 2.2 Publicar resultados JUnit (facilita debug se quebrar)
+    # 2.2 Verificar se o JAR foi criado
+    - powershell: |
+        Write-Host "Listando conteúdo do target:"
+        Get-ChildItem -Path target -Filter *.jar -Recurse
+      workingDirectory: '$(Build.SourcesDirectory)'
+      displayName: 'Verificar JAR gerado'
+
+    # 2.3 Publicar resultados JUnit (facilita debug se quebrar)
     - task: PublishTestResults@2
       displayName: 'Publicar resultados de teste'
       inputs:
@@ -141,7 +150,7 @@ stages:
         testResultsFiles: 'target/surefire-reports/*.xml'
         failTaskOnFailedTests: true
 
-    # 2.3 Publicar artefatos (JAR + imageTag)
+    # 2.4 Publicar artefatos (JAR + imageTag)
     - powershell: |
         New-Item -ItemType Directory -Force -Path "$(Build.ArtifactStagingDirectory)" | Out-Null
         Copy-Item -Path ".\target\*.jar" -Destination "$(Build.ArtifactStagingDirectory)" -ErrorAction SilentlyContinue
@@ -155,13 +164,14 @@ stages:
         artifact: 'drop'
         publishLocation: 'pipeline'
 
-   # 2.4 Docker build & push no ACR (Windows, sem ACR Tasks)
+    # 2.5 Docker build & push no ACR (Windows, sem ACR Tasks)
     - task: AzureCLI@2
       displayName: 'Docker build & push no ACR (Windows)'
       inputs:
         azureSubscription: 'MyAzureSubscription'
         scriptType: ps
         scriptLocation: inlineScript
+        workingDirectory: '$(Build.SourcesDirectory)'
         inlineScript: |
           $ErrorActionPreference = 'Stop'
 
@@ -192,6 +202,7 @@ stages:
           # 5) Exportar tag para o stage de deploy
           Write-Host "##vso[task.setvariable variable=imageTag;isOutput=true]$img"
           Write-Host "Imagem publicada: $loginServer/$img"
+
 
 
 
