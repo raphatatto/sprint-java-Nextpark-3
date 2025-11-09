@@ -229,24 +229,24 @@ stages:
           $app = '$(appName)'
           $acr = '$(acrName)'
 
-          # Use a mesma tag usada no build/push
-          $imageTag = "$(imageName):$(Build.BuildId)"
-
+          # Recalcula a mesma tag do build
+          $imageTag   = "$(imageName):$(Build.BuildId)"
           $loginServer = az acr show -n $acr --query loginServer -o tsv
 
-          # Credenciais admin do ACR
           $acrCred = az acr credential show -n $acr | ConvertFrom-Json
           $acrUser = $acrCred.username
           $acrPass = $acrCred.passwords[0].value
 
-          # Web App (Linux) escuta 80 por padrão; sua app expõe 8080
           az webapp config appsettings set -g $rg -n $app --settings WEBSITES_PORT=8080 | Out-Null
 
           $fullImage = "$loginServer/$imageTag"
-
-          # Tudo em uma linha (sem crase) para evitar erro de parsing
-          az webapp config container set -g $rg -n $app --docker-custom-image-name $fullImage --docker-registry-server-url "https://$loginServer" --docker-registry-server-user $acrUser --docker-registry-server-password $acrPass
+          az webapp config container set -g $rg -n $app `
+            --docker-custom-image-name $fullImage `
+            --docker-registry-server-url "https://$loginServer" `
+            --docker-registry-server-user $acrUser `
+            --docker-registry-server-password $acrPass
 
           Write-Host "Deploy OK: $fullImage"
+
 
 
