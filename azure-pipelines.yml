@@ -3,7 +3,9 @@
 trigger:
   branches:
     include:
+      - master
       - main
+      
 
 variables:
   rm: rm554983
@@ -125,15 +127,24 @@ stages:
   dependsOn: criarInfra
   jobs:
   - job: build
-    displayName: 'Maven build + ACR build (remoto)'
+    displayName: 'Maven build + Docker push (Windows)'
     steps:
-    # 2.1 Build + testes (profile test)
+
+    # 2.1 Build do JAR
     - powershell: |
         mvn -v
-        mvn -B -ntp clean test
-      displayName: 'Build e testes Maven (profile test)'
+        mvn -B -ntp clean test package
+      workingDirectory: '$(Build.SourcesDirectory)'
+      displayName: 'Build do JAR com Maven'
 
-    # 2.2 Publicar resultados JUnit (facilita debug se quebrar)
+    # 2.2 Verificar se o JAR foi criado
+    - powershell: |
+        Write-Host "Listando conteúdo do target:"
+        Get-ChildItem -Path target -Filter *.jar -Recurse
+      workingDirectory: '$(Build.SourcesDirectory)'
+      displayName: 'Verificar JAR gerado'
+
+    # 2.3 Publicar resultados JUnit (facilita debug se quebrar)
     - task: PublishTestResults@2
       displayName: 'Publicar resultados de teste'
       inputs:
@@ -141,7 +152,7 @@ stages:
         testResultsFiles: 'target/surefire-reports/*.xml'
         failTaskOnFailedTests: true
 
-    # 2.3 Publicar artefatos (JAR + imageTag)
+    # 2.4 Publicar artefatos (JAR + imageTag)
     - powershell: |
         New-Item -ItemType Directory -Force -Path "$(Build.ArtifactStagingDirectory)" | Out-Null
         Copy-Item -Path ".\target\*.jar" -Destination "$(Build.ArtifactStagingDirectory)" -ErrorAction SilentlyContinue
@@ -155,30 +166,46 @@ stages:
         artifact: 'drop'
         publishLocation: 'pipeline'
 
-    # 2.4 Build remoto no ACR (sem Docker local)
+    # 2.5 Docker build & push no ACR (Windows, sem ACR Tasks)
     - task: AzureCLI@2
-      displayName: 'ACR Build (build remoto + push)'
+      displayName: 'Docker build & push no ACR (Windows)'
       inputs:
         azureSubscription: 'MyAzureSubscription'
         scriptType: ps
         scriptLocation: inlineScript
+        workingDirectory: '$(Build.SourcesDirectory)'
         inlineScript: |
           $ErrorActionPreference = 'Stop'
-          $acr = '$(acrName)'
-          $rg  = '$(resourceGroup)'
-          $tag = "$(imageName):$(Build.BuildId)"
 
-          cmd /c "az acr show -n $acr -g $rg >NUL 2>&1"
-          if ($LASTEXITCODE -ne 0) {
-            throw "ACR '$acr' não encontrado no RG '$rg'. Verifique a etapa 'criarInfra' e a assinatura da Service Connection."
+          $acr = '$(acrName)'
+          $img = "$(imageName):$(Build.BuildId)"
+
+          # 0) Garantir que estamos na pasta do Dockerfile (YAML: workingDirectory já cuida)
+          Write-Host "PWD: $(Get-Location)"
+
+          # 1) Docker ativo
+          try { docker version | Out-Null } catch {
+            throw "Docker Desktop não está em execução (Engine Linux). Abra o Docker e tente novamente."
           }
 
-          # O ACR compila a imagem a partir do Dockerfile do repo
-          az acr build -r $acr -g $rg -t $tag .
+          if (-not (Get-ChildItem -Path 'target' -Filter '*.jar' -ErrorAction SilentlyContinue)) {
+            throw "Ainda não há JAR em .\target. Confira o passo Maven package."
+          }
 
-          # Variável de saída para o stage de deploy
-          Write-Host "##vso[task.setvariable variable=imageTag;isOutput=true]$tag"
-          Write-Host "Imagem publicada no ACR: $tag"
+          # 3) Login no ACR
+          $loginServer = az acr show -n $acr --query loginServer -o tsv
+          az acr login -n $acr | Out-Null
+
+          # 4) Build/Tag/Push
+          docker build -t $img .
+          docker tag $img "$loginServer/$img"
+          docker push "$loginServer/$img"
+
+          # 5) Exportar tag para o stage de deploy
+          Write-Host "##vso[task.setvariable variable=imageTag;isOutput=true]$img"
+          Write-Host "Imagem publicada: $loginServer/$img"
+
+
 
 
 
@@ -198,26 +225,28 @@ stages:
         scriptLocation: inlineScript
         inlineScript: |
           $ErrorActionPreference = 'Stop'
-          $rg       = '$(resourceGroup)'
-          $app      = '$(appName)'
-          $acr      = '$(acrName)'
-          $imageTag = '$(imageTag)'
-          if (-not $imageTag) { $imageTag = "$(imageName):$(Build.BuildId)" }
+          $rg  = '$(resourceGroup)'
+          $app = '$(appName)'
+          $acr = '$(acrName)'
 
-          $loginServer = az acr show -n $acr --query loginServer -o tsv --only-show-errors
+          # Use a mesma tag usada no build/push
+          $imageTag = "$(imageName):$(Build.BuildId)"
 
-          # Credenciais admin do ACR (criadas com --admin-enabled true)
-          $acrCred = az acr credential show -n $acr --only-show-errors | ConvertFrom-Json
+          $loginServer = az acr show -n $acr --query loginServer -o tsv
+
+          # Credenciais admin do ACR
+          $acrCred = az acr credential show -n $acr | ConvertFrom-Json
           $acrUser = $acrCred.username
           $acrPass = $acrCred.passwords[0].value
 
-          # Web Apps Linux esperam 80 por padrão; sua app expõe 8080
-          az webapp config appsettings set -g $rg -n $app --settings WEBSITES_PORT=8080 --only-show-errors | Out-Null
+          # Web App (Linux) escuta 80 por padrão; sua app expõe 8080
+          az webapp config appsettings set -g $rg -n $app --settings WEBSITES_PORT=8080 | Out-Null
 
-          az webapp config container set -g $rg -n $app `
-            --docker-custom-image-name "$loginServer/$imageTag" `
-            --docker-registry-server-url "https://$loginServer" `
-            --docker-registry-server-user "$acrUser" `
-            --docker-registry-server-password "$acrPass" --only-show-errors | Out-Null
+          $fullImage = "$loginServer/$imageTag"
 
-          Write-Host "Deploy OK: $loginServer/$imageTag"
+          # Tudo em uma linha (sem crase) para evitar erro de parsing
+          az webapp config container set -g $rg -n $app --docker-custom-image-name $fullImage --docker-registry-server-url "https://$loginServer" --docker-registry-server-user $acrUser --docker-registry-server-password $acrPass
+
+          Write-Host "Deploy OK: $fullImage"
+
+
