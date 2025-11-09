@@ -20,7 +20,7 @@ https://youtu.be/vhddup5DgIQ
 - **Histórico de movimentações**: cada alocação, transferência ou exclusão gera registro consultável por moto. 【F:src/main/java/br/com/fiap/nextpark/controller/MotoController.java†L90-L94】【F:src/main/java/br/com/fiap/nextpark/service/MotoService.java†L141-L154】
 - **Promoção de usuários a gerente**: administradores existentes podem promover outras contas para o papel `GERENTE`. 【F:src/main/java/br/com/fiap/nextpark/controller/UsuarioController.java†L8-L22】
 - **Tratamento global de erros** com mensagens amigáveis para violações de regra de negócio, restrições de banco e acessos negados. 【F:src/main/java/br/com/fiap/nextpark/web/GlobalExceptionHandler.java†L12-L56】
-
+- ** Deploy no Azure devops **.
 ## Arquitetura e stack
 
 - **Linguagem**: Java 17.
