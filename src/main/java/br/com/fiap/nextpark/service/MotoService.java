@@ -32,7 +32,6 @@ public class MotoService {
         this.histRepo = histRepo;
     }
 
-    // LISTAGENS
     public List<Moto> listarPara(String username, boolean gerente, String q) {
         if (gerente) return motoRepo.searchAll(q == null ? "" : q);
         Long ownerId = usuarioService.requireByUsername(username).getId();
