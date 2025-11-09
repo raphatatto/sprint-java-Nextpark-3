@@ -1,40 +1,436 @@
-/* Base */
-* { box-sizing: border-box; }
-html, body { margin:0; padding:0; }
-body { font-family: Arial, Helvetica, sans-serif; background:#f7f8fa; color:#222; }
-
-/* Layout topo */
-header { display:flex; align-items:center; justify-content:space-between; gap:16px;
-         padding:12px 16px; background:#fff; border-bottom:1px solid #eaeaea; }
-.brand { font-weight:700; }
-nav a { margin-right:12px; text-decoration:none; color:#1f2937; }
-nav a:hover { text-decoration:underline; }
-
-/* Conteúdo */
-.container { padding:16px; }
-h1 { margin:0 0 16px; font-size:28px; }
-.card { background:#fff; border:1px solid #eaeaea; border-radius:10px; padding:16px; margin-bottom:16px; }
-.grid.two { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-@media (max-width:900px){ .grid.two { grid-template-columns:1fr; } }
-.alert{padding:10px 12px; border-radius:8px; margin:8px 0;}
-.alert.success{background:#ecfdf5; border:1px solid #10b981; color:#065f46;}
-.alert.error{background:#fef2f2; border:1px solid #ef4444; color:#7f1d1d;}
-/* Formulários */
-label { display:block; margin:8px 0 4px; color:#334155; }
-input[type=text], input[type=password], select {
-  width:320px; padding:8px; border:1px solid #d1d5db; border-radius:6px; background:#fff;
+{
+box-sizing: border-box;
+margin: 0;
+padding: 0;
 }
-form .row { margin-bottom:10px; }
 
-/* Botões */
-.btn, button { padding:6px 12px; border:1px solid #d1d5db; border-radius:8px; background:#f3f4f6; cursor:pointer; }
-.btn:hover, button:hover { background:#e5e7eb; }
-.inline { display:inline; }
+html {
+font-size: 16px;
+line-height: 1.6;
+}
 
-/* Tabelas */
-table { width:100%; border-collapse:collapse; background:#fff; border:1px solid #eaeaea; border-radius:10px; overflow:hidden; }
-th, td { padding:10px 12px; border-bottom:1px solid #f1f5f9; text-align:left; }
-th { background:#f8fafc; color:#334155; font-weight:600; }
+body {
+font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+background: #f8fafc;
+color: #1e293b;
+min-height: 100vh;
+display: flex;
+flex-direction: column;
+}
 
-/* Rodapé */
-footer { color:#6b7280; margin-top:16px; }
+/* Layout topo - Mais moderno e acessível */
+header {
+display: flex;
+align-items: center;
+justify-content: space-between;
+gap: 24px;
+padding: 16px 5%;
+background: #fff;
+border-bottom: 1px solid #e2e8f0;
+box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+position: sticky;
+top: 0;
+z-index: 100;
+}
+
+.brand {
+font-weight: 800;
+font-size: 1.5rem;
+color: #3b82f6;
+letter-spacing: -0.025em;
+}
+
+nav {
+display: flex;
+gap: 8px;
+}
+
+nav a {
+padding: 8px 16px;
+text-decoration: none;
+color: #475569;
+border-radius: 6px;
+font-weight: 500;
+transition: all 0.2s ease;
+position: relative;
+}
+
+nav a:hover {
+background: #f1f5f9;
+color: #1e293b;
+text-decoration: none;
+}
+
+nav a.active {
+color: #3b82f6;
+background: #eff6ff;
+}
+
+/* Conteúdo principal - Melhor hierarquia visual */
+.container {
+padding: 32px 5%;
+flex: 1;
+max-width: 1400px;
+margin: 0 auto;
+width: 100%;
+}
+
+h1 {
+margin: 0 0 24px;
+font-size: 2rem;
+font-weight: 700;
+color: #0f172a;
+line-height: 1.2;
+}
+
+h2 {
+font-size: 1.5rem;
+font-weight: 600;
+color: #1e293b;
+margin-bottom: 16px;
+}
+
+/* Cards - Mais profundidade e modernidade */
+.card {
+background: #fff;
+border: 1px solid #e2e8f0;
+border-radius: 12px;
+padding: 24px;
+margin-bottom: 24px;
+box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+transition: all 0.2s ease;
+position: relative;
+}
+
+.card:hover {
+box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+transform: translateY(-1px);
+}
+
+.card-header {
+display: flex;
+justify-content: between;
+align-items: center;
+margin-bottom: 16px;
+padding-bottom: 12px;
+border-bottom: 1px solid #f1f5f9;
+}
+
+/* Grid system melhorado */
+.grid.two {
+display: grid;
+grid-template-columns: 1fr 1fr;
+gap: 24px;
+}
+
+.grid.three {
+display: grid;
+grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+gap: 24px;
+}
+
+@media (max-width: 768px){
+.grid.two,
+.grid.three {
+grid-template-columns: 1fr;
+}
+}
+
+/* Alertas - Mais visuais e informativos */
+.alert {
+padding: 16px 20px;
+border-radius: 10px;
+margin: 16px 0;
+display: flex;
+align-items: flex-start;
+gap: 12px;
+border-left: 4px solid;
+}
+
+.alert.success {
+background: #f0fdf4;
+border-color: #22c55e;
+color: #166534;
+}
+
+.alert.error {
+background: #fef2f2;
+border-color: #ef4444;
+color: #991b1b;
+}
+
+.alert.warning {
+background: #fffbeb;
+border-color: #f59e0b;
+color: #92400e;
+}
+
+.alert.info {
+background: #eff6ff;
+border-color: #3b82f6;
+color: #1e40af;
+}
+
+.alert-icon {
+font-size: 1.2rem;
+flex-shrink: 0;
+}
+
+/* Formulários - Melhor UX e acessibilidade */
+.form-group {
+margin-bottom: 20px;
+}
+
+label {
+display: block;
+margin: 0 0 8px;
+color: #374151;
+font-weight: 500;
+font-size: 0.9rem;
+}
+
+.required::after {
+content: " *";
+color: #ef4444;
+}
+
+input[type=text],
+input[type=password],
+input[type=email],
+select,
+textarea {
+width: 100%;
+max-width: 400px;
+padding: 12px 16px;
+border: 1.5px solid #d1d5db;
+border-radius: 8px;
+background: #fff;
+color: #1e293b;
+font-size: 1rem;
+transition: all 0.2s ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+outline: none;
+border-color: #3b82f6;
+box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.form-hint {
+font-size: 0.8rem;
+color: #6b7280;
+margin-top: 4px;
+}
+
+/* Botões - Sistema de design consistente */
+.btn,
+button {
+padding: 12px 24px;
+border: none;
+border-radius: 8px;
+background: #f8fafc;
+color: #374151;
+cursor: pointer;
+font-size: 0.9rem;
+font-weight: 500;
+transition: all 0.2s ease;
+display: inline-flex;
+align-items: center;
+gap: 8px;
+border: 1px solid #e2e8f0;
+}
+
+.btn:hover,
+button:hover {
+background: #f1f5f9;
+transform: translateY(-1px);
+box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.btn.primary {
+background: #3b82f6;
+color: white;
+border-color: #3b82f6;
+}
+
+.btn.primary:hover {
+background: #2563eb;
+}
+
+.btn.success {
+background: #10b981;
+color: white;
+border-color: #10b981;
+}
+
+.btn.danger {
+background: #ef4444;
+color: white;
+border-color: #ef4444;
+}
+
+.btn.small {
+padding: 8px 16px;
+font-size: 0.8rem;
+}
+
+.btn.large {
+padding: 16px 32px;
+font-size: 1rem;
+}
+
+/* Tabelas - Mais legíveis e com melhor hierarquia */
+.table-container {
+background: #fff;
+border-radius: 12px;
+overflow: hidden;
+box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+margin: 24px 0;
+}
+
+table {
+width: 100%;
+border-collapse: collapse;
+background: #fff;
+}
+
+th, td {
+padding: 16px 20px;
+border-bottom: 1px solid #f1f5f9;
+text-align: left;
+}
+
+th {
+background: #f8fafc;
+color: #475569;
+font-weight: 600;
+font-size: 0.9rem;
+text-transform: uppercase;
+letter-spacing: 0.025em;
+}
+
+tr {
+transition: background 0.2s ease;
+}
+
+tr:hover {
+background: #f8fafc;
+}
+
+/* Estados de loading e vazio */
+.loading {
+opacity: 0.6;
+pointer-events: none;
+}
+
+.empty-state {
+text-align: center;
+padding: 48px 24px;
+color: #6b7280;
+}
+
+.empty-state svg {
+margin-bottom: 16px;
+opacity: 0.5;
+}
+
+/* Rodapé - Mais espaçamento e clareza */
+footer {
+background: #fff;
+color: #6b7280;
+padding: 32px 5%;
+margin-top: 64px;
+border-top: 1px solid #e2e8f0;
+text-align: center;
+}
+
+.footer-content {
+max-width: 1200px;
+margin: 0 auto;
+display: flex;
+justify-content: space-between;
+align-items: center;
+flex-wrap: wrap;
+gap: 16px;
+}
+
+/* Utilitários */
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+.mt-0 { margin-top: 0; }
+.mb-0 { margin-bottom: 0; }
+.mt-4 { margin-top: 24px; }
+.mb-4 { margin-bottom: 24px; }
+.p-4 { padding: 24px; }
+
+/* Animações suaves */
+.fade-in {
+animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+from { opacity: 0; transform: translateY(10px); }
+to { opacity: 1; transform: translateY(0); }
+}
+
+/* Scrollbar customizada para Webkit */
+::-webkit-scrollbar {
+width: 8px;
+}
+
+::-webkit-scrollbar-track {
+background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+background: #cbd5e1;
+border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+background: #94a3b8;
+}
+
+/* Focus visível para acessibilidade */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+a:focus-visible {
+outline: 2px solid #3b82f6;
+outline-offset: 2px;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+:root {
+color-scheme: light dark;
+}
+}
+
+/* Responsividade aprimorada */
+@media (max-width: 480px) {
+.container {
+padding: 16px;
+}
+
+header {
+padding: 12px 16px;
+flex-direction: column;
+gap: 12px;
+}
+
+nav {
+width: 100%;
+justify-content: center;
+}
+
+h1 {
+font-size: 1.5rem;
+}
+
+.card {
+padding: 16px;
+}
+}
